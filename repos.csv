@@ -1,0 +1,7 @@
+origin,path,cloneUrl,branch
+github.com,spring-projects/spring-petclinic,https://github.com/spring-projects/spring-petclinic,main
+github.com,spring-petclinic/spring-petclinic-rest,https://github.com/spring-petclinic/spring-petclinic-rest,master
+github.com,spring-petclinic/spring-framework-petclinic,https://github.com/spring-petclinic/spring-framework-petclinic,main
+github.com,spring-petclinic/spring-petclinic-reactive,https://github.com/spring-petclinic/spring-petclinic-reactive,master
+github.com,spring-petclinic/spring-petclinic-microservices,https://github.com/spring-petclinic/spring-petclinic-microservices,main
+github.com,Netflix/eureka,https://github.com/Netflix/eureka,master

@@ -1,0 +1,15 @@
+# Cloned directories (recreated by init.sh)
+multi-repo/
+no-trigrep/
+with-trigrep/
+
+# Moderne build artifacts
+.moderne/
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+*.iml
+.vscode/
