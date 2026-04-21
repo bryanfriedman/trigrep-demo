@@ -53,8 +53,24 @@ mod search . --syntax=zoekt RequestMapping    # same literal, Zoekt-style
 ```
 
 Narrate: "Sourcegraph is the default — literals in quotes, regex in slashes.
-If your muscle memory is Zoekt, `--syntax=zoekt` flips it. Literal and
-symbol queries work the same either way."
+If your muscle memory is Zoekt, `--syntax=zoekt` flips it. Same index
+underneath, different surface language."
+
+Quick reference if anyone asks:
+
+| Goal | Sourcegraph | Zoekt |
+|---|---|---|
+| Literal match | `"RequestMapping"` | `RequestMapping` (regex) |
+| Regex | `/findBy\w+/` | `findBy\w+` |
+| Symbol lookup | `"Foo" type:symbol` | `sym:Foo` |
+| NOT / exclude | `-file:test` | `-f:test` |
+| Boolean AND | `foo AND bar` | `foo bar` |
+
+Semantic filters (`extends:`, `visibility:`, `returns:`, etc.) work the same
+in both modes — those are LST-backed, not dialect-specific.
+
+More Tier 1 examples to riff on (boolean composition, file filters, regex
+alternation) in [QUERIES.md](QUERIES.md#tier-1--familiar-syntax-warm-up).
 
 ### Step 2 — Semantic filters (5 min)
 

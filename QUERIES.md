@@ -13,39 +13,87 @@ Supported semantic filters: `extends:`, `implements:`, `visibility:`,
 
 ## Syntax modes
 
-Trigrep supports two query syntaxes via `--syntax`:
+Trigrep supports two query syntaxes via `--syntax`. Same underlying index,
+different surface language:
 
-- `--syntax=sourcegraph` (default) — Sourcegraph-style: literals in quotes,
-  regex wrapped in `/.../`, field filters like `lang:java`.
-- `--syntax=zoekt` — Zoekt-style: bare tokens, different regex conventions.
+| Goal | Sourcegraph (default) | Zoekt (`--syntax=zoekt`) |
+|---|---|---|
+| Literal match | `"RequestMapping"` | `RequestMapping` (treated as regex) |
+| Regex | `/findBy\w+/` | `findBy\w+` |
+| Case-sensitive | `case:yes` | `case:yes` |
+| NOT / exclude | `-file:test` | `-f:test` |
+| Symbol lookup | `"Foo" type:symbol` | `sym:Foo` |
+| Boolean AND | `foo AND bar` | `foo bar` (implicit) |
 
-Semantic filters (`extends:`, `implements:`, etc.) work in both modes.
+**The semantic filters** (`extends:`, `implements:`, `visibility:`,
+`type:method`, `returns:`, `throws:`) are LST-backed additions and work the
+same in both modes. `--syntax` is a muscle-memory toggle, not a capability one.
 
 ---
 
 ## Tier 1 — Familiar syntax (warm-up)
 
-_Open with these so the audience sees "you already know this query language."_
+_Open with these so the audience sees "you already know this query language."
+All are fast — pick whichever lands best with the audience._
+
+### Literals
 
 ```bash
-# Literal (Sourcegraph default — quoted)
-mod search . '"RequestMapping"'
+mod search . '"RequestMapping"'                  # plain literal
+mod search . '"@RestController"'                 # annotation-like literal
+mod search . '"spring-framework"'                # hyphenated literal
+mod search . '"TODO"'                            # comment scan across the working set
+```
 
-# Regex (Sourcegraph — slashes)
-mod search . '/find\w+By\w+/'
+### Regex
 
-# Symbol lookup
-mod search . '"ClinicService"' type:symbol
+```bash
+mod search . '/find\w+By\w+/'                    # finder method names
+mod search . '/save\w*/'                         # save, saveAll, savedItems…
+mod search . '/Test\w+/'                         # classes/tokens starting with Test
+mod search . '/(Abstract|Base)\w+/'              # alternation — base classes
+mod search . '/ERROR|FAILED|Exception/'          # error/exception mentions
+```
 
-# Same literal, Zoekt syntax (bare)
-mod search . --syntax=zoekt RequestMapping
+### Symbol lookups
+
+```bash
+mod search . '"ClinicService"' type:symbol       # class symbol
+mod search . '"findOwnerById"' type:symbol       # method symbol
+mod search . '"Owner"' type:symbol               # any symbol named Owner
+mod search . '/Repository$/' type:symbol         # regex symbol — all Repository classes
+```
+
+### Boolean composition
+
+```bash
+mod search . '"Controller" AND "RequestMapping"' # both tokens in same file
+mod search . '"Owner" AND NOT "Test"'            # narrow away test files
+mod search . '"Controller" OR "Service"'         # either token
+```
+
+### File / path filters
+
+```bash
+mod search . '"Controller" file:src/main/'      # only main sources (Sourcegraph)
+mod search . '"Repository" -file:test'          # exclude test files
+mod search . 'extends:BaseEntity file:model/'   # scope semantic filter by path
+```
+
+### Zoekt dialect
+
+```bash
+mod search . --syntax=zoekt RequestMapping       # bare literal (same result as quoted SG)
+mod search . --syntax=zoekt 'findBy\w+'          # regex bare
+mod search . --syntax=zoekt sym:ClinicService    # Zoekt symbol lookup
+mod search . --syntax=zoekt 'Controller -f:test' # exclusion with `-f:`
 ```
 
 Narrate: "Sourcegraph is the default. If your muscle memory is Zoekt,
-`--syntax=zoekt` flips it." Literal and symbol queries behave the same in
-both; regex and field-filter conventions differ.
+`--syntax=zoekt` flips it. Same index underneath, just different surface
+syntax — audience already knows one of them."
 
-Grep contrast (optional):
+### Grep contrast (optional)
 
 ```bash
 grep -rn "RequestMapping" .
