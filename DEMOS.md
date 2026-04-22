@@ -38,7 +38,7 @@ _Trigrep across a working set of repos. Humans searching portfolios._
 
 ```bash
 cd multi-repo
-ls          # show the Spring ecosystem sampler: 5 petclinic variants + Netflix eureka
+ls          # show the Spring ecosystem sampler: 4 petclinic variants + Netflix eureka
 ```
 
 ### Step 1 — Familiar syntax (60 sec)
@@ -68,8 +68,8 @@ exists, but it's cosmetic — everything below stays on the default.)
 Layer in the filters only Trigrep has:
 
 ```bash
-# Disambiguation
-mod search . sym:StringUtils
+# Disambiguation — same name, multiple declarations across variants
+mod search . sym:Vet
 
 # API surface — grep can't filter by visibility or return type
 mod search . visibility:public type:method returns:ResponseEntity
@@ -111,20 +111,22 @@ candidates.
 
 ### Step 4 — Contrast with grep (60 sec)
 
-Pick one — the `StringUtils` one lands best:
+Use the `Vet` disambiguation from Step 2 — it lands best:
 
 ```bash
-grep -rn "StringUtils" . | wc -l
+grep -rn "Vet" . | wc -l
 ```
 
-Hundreds of lines. Then:
+~16,000 lines — every textual "Vet", including substring noise inside
+`Veterinarian`, comments, test assertions, string constants. Then:
 
 ```bash
-mod search . sym:StringUtils
+mod search . sym:Vet
 ```
 
-Handful of declarations. "Same question, different answer shape, because
-`sym:` knows what a class is."
+~180 matches — only lines where `Vet` resolves to a symbol. Two orders of
+magnitude tighter. "Same question, different answer shape, because `sym:`
+knows what a class is."
 
 ### Step 5 — Bridge to a recipe run (2-3 min)
 

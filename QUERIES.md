@@ -71,15 +71,6 @@ mod search . 'sym:/Repository$/'                 # regex symbol — all Reposito
 mod search . 'sym:/Abstract\w+/'                 # every Abstract* symbol
 ```
 
-### Grep contrast (optional)
-
-```bash
-grep -rn "RequestMapping" .
-```
-
-Grep returns every import line, every usage, every comment. Trigrep's symbol
-search returns just the declarations.
-
 ---
 
 ## Tier 2 — Semantic filters (the differentiator)
@@ -87,22 +78,27 @@ search returns just the declarations.
 _The moves grep and Sourcegraph can't make. Each is an LST-aware query that
 would require AST parsing to replicate by hand._
 
-### Disambiguation: which `StringUtils`?
+### Disambiguation: the `Vet` subsystem
 
 ```bash
-mod search . sym:StringUtils
+mod search . sym:Vet
 ```
 
-Expected: a handful of `StringUtils` classes across repos. The symbol filter
-shows declarations, not every call site.
+Expected: every `Vet*` symbol across the petclinic variants — the `Vet` class
+declared separately in each flavor (REST, reactive, microservices, Thymeleaf
+main) plus `VetController`, `VetRepository`, `VetResource`, `VetEntity`,
+`VetReactiveDao`, and so on. Trigrep finds the whole "Vet subsystem" across
+the portfolio without you knowing where it lives.
 
 Grep contrast:
 
 ```bash
-grep -rn "StringUtils" . | wc -l
+grep -rn "Vet" . | wc -l
 ```
 
-Grep drowns you. The point lands: "symbol search knows what a class is."
+~16,000 lines versus ~180. Grep counts every textual occurrence including
+substring noise (`Veterinarian`, comments, imports, test strings); `sym:`
+counts symbol references. "Symbol search knows what a class is."
 
 ### Inheritance: who extends `Person`?
 
@@ -111,7 +107,7 @@ mod search . extends:Person
 ```
 
 Expected: `Owner` and `Vet` in multiple petclinic variants. Narrate how each
-petclinic flavor (JSP, REST, reactive, framework, microservices) has its own
+petclinic flavor (REST, reactive, microservices, Thymeleaf main) has its own
 `Person` hierarchy — Trigrep finds them all without you needing to know where.
 
 Grep cannot do this.

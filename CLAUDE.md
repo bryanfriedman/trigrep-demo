@@ -44,7 +44,7 @@ These are different workflows with different value props. Never conflate them in
 
 ### Repo selections (done)
 
-**Multi-repo set** (CLI demo): 5 petclinic variants + Netflix eureka. See `repos.csv`.
+**Multi-repo set** (CLI demo): 4 petclinic variants + Netflix eureka. See `repos.csv`. Dropped `spring-framework-petclinic` (2026-04-21) — its JSPs hit an NPE in the XML parser that aborted the resource build step, leaving the trigram index empty.
 
 **Single repo** (MCP agent demo): `Netflix/eureka` (Gradle, ~409 Java files, pre-built LSTs on Moderne platform). Chose this because:
 - Gradle-based — bypasses the `modmaven-metadata` bug in `mod mcp`
