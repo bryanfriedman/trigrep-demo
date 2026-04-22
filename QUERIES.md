@@ -8,26 +8,25 @@ Every `mod search` call needs a path as its first argument. From
 `multi-repo/`, use `.`. From elsewhere, give an absolute path.
 
 Supported semantic filters: `extends:`, `implements:`, `visibility:`,
-`type:method`, `type:symbol`, `throws:`, `returns:`. **Not supported:**
-`type:annotation`.
+`type:method`, `type:symbol`, `throws:`, `returns:`. Structural patterns use
+the `struct:` prefix (Comby syntax). **Not supported:** `type:annotation`.
 
-## Syntax modes
+> **CLI 4.1.6 note:** boolean composition (`AND`/`OR`/`NOT`), `file:` / `path:`
+> / `lang:` filters, and `-file:` / `-f:` exclusions are documented on the
+> website but do not currently parse in `mod search` — they silently return
+> zero matches. Use separate queries and filter the output, or use `struct:`
+> patterns for multi-token matches. Filed to engineering.
 
-Trigrep supports two query syntaxes via `--syntax`. Same underlying index,
-different surface language:
+Sourcegraph is the default syntax. Zoekt is available via `--syntax=zoekt` if
+that's your muscle memory, but it's strictly cosmetic in practice — and its
+bare-regex support is partial in CLI 4.1.6 — so all examples below stay on
+Sourcegraph.
 
-| Goal | Sourcegraph (default) | Zoekt (`--syntax=zoekt`) |
-|---|---|---|
-| Literal match | `"RequestMapping"` | `RequestMapping` (treated as regex) |
-| Regex | `/findBy\w+/` | `findBy\w+` |
-| Case-sensitive | `case:yes` | `case:yes` |
-| NOT / exclude | `-file:test` | `-f:test` |
-| Symbol lookup | `"Foo" type:symbol` | `sym:Foo` |
-| Boolean AND | `foo AND bar` | `foo bar` (implicit) |
-
-**The semantic filters** (`extends:`, `implements:`, `visibility:`,
-`type:method`, `returns:`, `throws:`) are LST-backed additions and work the
-same in both modes. `--syntax` is a muscle-memory toggle, not a capability one.
+> **Symbol-lookup caveat:** the Sourcegraph-native form
+> `'"Foo"' type:symbol` parses but leaks into non-code files (README.md, etc.)
+> in CLI 4.1.6, and the regex variant `'/Foo$/' type:symbol` silently returns
+> zero matches. Prefer `sym:Foo` / `sym:/Foo$/` — works in both syntaxes and
+> scopes to `.java`.
 
 ---
 
@@ -38,11 +37,16 @@ All are fast — pick whichever lands best with the audience._
 
 ### Literals
 
+_Plain text scans — the kind of thing you'd reach for grep for. Notes, URLs,
+license headers, debug artifacts left behind._
+
 ```bash
-mod search . '"RequestMapping"'                  # plain literal
-mod search . '"@RestController"'                 # annotation-like literal
-mod search . '"spring-framework"'                # hyphenated literal
-mod search . '"TODO"'                            # comment scan across the working set
+mod search . '"TODO"'                            # TODO comments across the working set
+mod search . '"FIXME"'                           # FIXME comments
+mod search . '"Copyright"'                       # license headers
+mod search . '"localhost"'                       # hardcoded dev URLs
+mod search . '"System.out.println"'              # debug prints someone forgot
+mod search . '"password"'                        # scan for the word password (config, messages, docs)
 ```
 
 ### Regex
@@ -57,41 +61,15 @@ mod search . '/ERROR|FAILED|Exception/'          # error/exception mentions
 
 ### Symbol lookups
 
-```bash
-mod search . '"ClinicService"' type:symbol       # class symbol
-mod search . '"findOwnerById"' type:symbol       # method symbol
-mod search . '"Owner"' type:symbol               # any symbol named Owner
-mod search . '/Repository$/' type:symbol         # regex symbol — all Repository classes
-```
-
-### Boolean composition
+`sym:` works in both syntax modes — use it everywhere.
 
 ```bash
-mod search . '"Controller" AND "RequestMapping"' # both tokens in same file
-mod search . '"Owner" AND NOT "Test"'            # narrow away test files
-mod search . '"Controller" OR "Service"'         # either token
+mod search . sym:ClinicService                   # class symbol
+mod search . sym:findOwnerById                   # method symbol
+mod search . sym:Owner                           # any symbol named Owner
+mod search . 'sym:/Repository$/'                 # regex symbol — all Repository classes
+mod search . 'sym:/Abstract\w+/'                 # every Abstract* symbol
 ```
-
-### File / path filters
-
-```bash
-mod search . '"Controller" file:src/main/'      # only main sources (Sourcegraph)
-mod search . '"Repository" -file:test'          # exclude test files
-mod search . 'extends:BaseEntity file:model/'   # scope semantic filter by path
-```
-
-### Zoekt dialect
-
-```bash
-mod search . --syntax=zoekt RequestMapping       # bare literal (same result as quoted SG)
-mod search . --syntax=zoekt 'findBy\w+'          # regex bare
-mod search . --syntax=zoekt sym:ClinicService    # Zoekt symbol lookup
-mod search . --syntax=zoekt 'Controller -f:test' # exclusion with `-f:`
-```
-
-Narrate: "Sourcegraph is the default. If your muscle memory is Zoekt,
-`--syntax=zoekt` flips it. Same index underneath, just different surface
-syntax — audience already knows one of them."
 
 ### Grep contrast (optional)
 
@@ -112,7 +90,7 @@ would require AST parsing to replicate by hand._
 ### Disambiguation: which `StringUtils`?
 
 ```bash
-mod search . '"StringUtils"' type:symbol
+mod search . sym:StringUtils
 ```
 
 Expected: a handful of `StringUtils` classes across repos. The symbol filter
@@ -164,26 +142,78 @@ mod search . implements:Repository
 
 ---
 
-## Tier 3 — Bridge to a recipe run (`--last-search`)
+## Tier 3 — Structural search (`struct:` / Comby)
+
+_When a query needs to match code structure that spans multiple tokens or
+lines, use a structural pattern. `:[hole]` placeholders match balanced
+delimiters (parens, braces, brackets, strings), so the match respects code
+shape instead of fighting it with regex._
+
+### Simple API usage
+
+```bash
+mod search . 'struct:System.out.println(:[msg])'    # ~82 matches: every println call
+mod search . 'struct:@RequestMapping(:[args])'      # ~21 matches: annotation invocations with args
+```
+
+Grep contrast: `grep -rn 'System.out.println' .` catches the same calls, but
+can't tell you what's inside the parens. `:[msg]` captures it and respects
+nested calls and strings.
+
+### Code smells (the "find refactoring candidates" move)
+
+```bash
+# Empty catch blocks — classic anti-pattern
+mod search . 'struct:catch (:[type] :[e]) { }'
+
+# Any catch body — swap in a precise pattern once you see what's there
+mod search . 'struct:catch (:[type] :[e]) {:[body]}'
+
+# Index-based for loops that could be enhanced for-each
+mod search . 'struct:for (int :[i] = 0; :[i] < :[list].size(); :[i]++) {:[body]}'
+```
+
+### Constructor and API call patterns
+
+```bash
+mod search . 'struct:new :[type](:[args])'          # every constructor call (~1.2k matches)
+mod search . 'struct:new ArrayList<:[t]>()'         # empty ArrayList — Collections.emptyList candidate
+mod search . 'struct:.equals(:[str])'               # every .equals(...) call site
+mod search . 'struct:Optional.of(:[x])'             # Optional.of call sites
+```
+
+Narrate: "Regex can't do this cleanly. A regex for `catch(...) { }` would miss
+anything with nested braces or a string literal containing `}`. Structural
+holes match balanced delimiters, so the pattern tracks the shape of the code."
+
+### Whitespace gotcha
+
+Struct templates are whitespace-sensitive: `{ :[body] }` (spaces) and
+`{:[body]}` (no spaces) are different templates. When a query returns zero
+matches, try collapsing the spaces around braces first.
+
+---
+
+## Tier 4 — Bridge to a recipe run (`--last-search`)
 
 _Fast search narrows the portfolio; a recipe does precise, deeper work on
 only the repos that matched. The climax of the CLI demo._
 
 ```bash
 # 1. Search for @RestController declarations.
-mod search . '"RestController"' type:symbol
+mod search . sym:RestController
 
 # 2. Run a deeper search recipe only against repos that matched.
 mod run . --last-search --recipe=org.openrewrite.java.search.FindAnnotations \
   -PannotationPattern='@org.springframework.web.bind.annotation.RestController'
 ```
 
-Why this is the story: the literal `"RestController"` search is fast but
-approximate (it matches any token that reads "RestController" — imports,
-string constants, comments). The `FindAnnotations` recipe is precise — it
-only reports actual `@RestController` annotations on declarations — but it's
-heavier. `--last-search` scopes the precise pass to only the repos that
-matched the cheap one.
+Why this is the story: the `sym:RestController` search is fast but
+approximate (it matches any symbol named `RestController` — the annotation
+itself, but also any class, method, or field using that name). The
+`FindAnnotations` recipe is precise — it only reports actual `@RestController`
+annotations on declarations — but it's heavier. `--last-search` scopes the
+precise pass to only the repos that matched the cheap one.
 
 Look at the output: "Produced results for N repositories." N is smaller than
 the total working set — that's the point.
@@ -199,8 +229,8 @@ Run from inside `with-trigrep/Netflix/eureka/`:
 
 ```bash
 mod search . visibility:public type:method                   # public API surface (792 matches)
-mod search . '"EurekaClient"' type:symbol                    # core interface
-mod search . '"InstanceInfo"' type:symbol                    # central domain class
+mod search . sym:EurekaClient                                # core interface
+mod search . sym:InstanceInfo                                # central domain class
 mod search . extends:AbstractInstanceRegistry                # registry implementations
 mod search . throws:IOException type:method                  # exception surface
 ```
@@ -222,7 +252,13 @@ Trigrep's structured results skip that work.
 - Quote Sourcegraph literals: `'"RequestMapping"'` (single-quoted for the
   shell, double-quoted for the query). Without quotes, Sourcegraph treats
   them as field expressions.
+- Boolean composition (`AND`/`OR`/`NOT`), `file:` / `path:` / `lang:` filters,
+  and `-file:` / `-f:` exclusions don't parse in CLI 4.1.6 — run separate
+  queries or use `struct:` for multi-token matches.
+- `struct:` templates are whitespace-sensitive between literal tokens. If a
+  structural query returns zero matches, collapse the spaces around braces.
 - Recipe options use bare `-PoptionName=value`, **not** `-Poption.optionName=`.
-- `type:annotation` is not a valid filter. Use the `FindAnnotations` recipe.
+- `type:annotation` is not a valid filter. For annotation structure, use
+  `struct:@Thing(:[args])` or the `FindAnnotations` recipe.
 - `mod search` needs a path arg — from `multi-repo/` use `.`, or give an
   absolute path.

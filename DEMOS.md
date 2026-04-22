@@ -41,44 +41,35 @@ cd multi-repo
 ls          # show the Spring ecosystem sampler: 5 petclinic variants + Netflix eureka
 ```
 
-### Step 1 — Familiar syntax (90 sec)
+### Step 1 — Familiar syntax (60 sec)
 
 Open with queries the audience already knows:
 
 ```bash
-mod search . '"RequestMapping"'               # literal (Sourcegraph default)
+mod search . '"RequestMapping"'               # literal (Sourcegraph syntax)
 mod search . '/find\w+By\w+/'                 # regex
-mod search . '"ClinicService"' type:symbol    # symbol
-mod search . --syntax=zoekt RequestMapping    # same literal, Zoekt-style
+mod search . sym:ClinicService                # symbol
 ```
 
-Narrate: "Sourcegraph is the default — literals in quotes, regex in slashes.
-If your muscle memory is Zoekt, `--syntax=zoekt` flips it. Same index
-underneath, different surface language."
+Narrate: "Trigrep uses Sourcegraph-style syntax — literals in quotes, regex
+in slashes, `sym:` for symbol lookups. Familiar shape; the interesting part
+is the filters you can layer on top." (If anyone asks: `--syntax=zoekt`
+exists, but it's cosmetic — everything below stays on the default.)
 
-Quick reference if anyone asks:
+> Heads-up: the web docs list boolean composition (`AND`/`OR`), `file:` /
+> `path:` / `lang:` filters, and `-f:` exclusions. These don't currently parse
+> in CLI 4.1.6 and silently return zero matches. Stick to the forms above, or
+> reach for `struct:` for multi-token patterns. See
+> [QUERIES.md](QUERIES.md#tier-1--familiar-syntax-warm-up) for the rehearsed
+> warm-up set.
 
-| Goal | Sourcegraph | Zoekt |
-|---|---|---|
-| Literal match | `"RequestMapping"` | `RequestMapping` (regex) |
-| Regex | `/findBy\w+/` | `findBy\w+` |
-| Symbol lookup | `"Foo" type:symbol` | `sym:Foo` |
-| NOT / exclude | `-file:test` | `-f:test` |
-| Boolean AND | `foo AND bar` | `foo bar` |
-
-Semantic filters (`extends:`, `visibility:`, `returns:`, etc.) work the same
-in both modes — those are LST-backed, not dialect-specific.
-
-More Tier 1 examples to riff on (boolean composition, file filters, regex
-alternation) in [QUERIES.md](QUERIES.md#tier-1--familiar-syntax-warm-up).
-
-### Step 2 — Semantic filters (5 min)
+### Step 2 — Semantic filters (4 min)
 
 Layer in the filters only Trigrep has:
 
 ```bash
 # Disambiguation
-mod search . '"StringUtils"' type:symbol
+mod search . sym:StringUtils
 
 # API surface — grep can't filter by visibility or return type
 mod search . visibility:public type:method returns:ResponseEntity
@@ -90,7 +81,35 @@ mod search . throws:IOException type:method
 Narrate the payoff: "These are queries grep literally cannot express. Visibility,
 return types, throws clauses — these exist in the LST, not in raw text."
 
-### Step 3 — Contrast with grep (90 sec)
+### Step 3 — Structural search with Comby (2 min)
+
+Some questions aren't about a single token, they're about a code shape. Show
+one or two structural patterns — queries grep can't express and regex can't
+express cleanly:
+
+```bash
+# Every println call across the portfolio — captures what's inside the parens
+mod search . 'struct:System.out.println(:[msg])'
+
+# Empty catch blocks — a classic code smell
+mod search . 'struct:catch (:[type] :[e]) { }'
+
+# All constructor call sites
+mod search . 'struct:new :[type](:[args])'
+```
+
+Narrate: "`struct:` switches on Comby structural matching. `:[hole]` matches
+balanced delimiters — parens, braces, strings — so the pattern respects code
+shape instead of fighting it with regex. This is the move for 'find me every
+place that looks like X.'"
+
+Heads-up while rehearsing: struct templates are whitespace-sensitive between
+literal tokens. If a query lands empty, collapse spaces around braces
+(`{:[body]}` vs `{ :[body] }`). See
+[QUERIES.md](QUERIES.md#tier-3--structural-search-struct--comby) for more
+candidates.
+
+### Step 4 — Contrast with grep (60 sec)
 
 Pick one — the `StringUtils` one lands best:
 
@@ -101,19 +120,19 @@ grep -rn "StringUtils" . | wc -l
 Hundreds of lines. Then:
 
 ```bash
-mod search . '"StringUtils"' type:symbol
+mod search . sym:StringUtils
 ```
 
-Handful of declarations. "Same question, different answer shape, because the
-index knows what a class is."
+Handful of declarations. "Same question, different answer shape, because
+`sym:` knows what a class is."
 
-### Step 4 — Bridge to a recipe run (2-3 min)
+### Step 5 — Bridge to a recipe run (2-3 min)
 
 The climax — fast search narrowing the working set, then a deeper search
 recipe doing precise work on only the matched repos:
 
 ```bash
-mod search . '"RestController"' type:symbol
+mod search . sym:RestController
 
 mod run . --last-search --recipe=org.openrewrite.java.search.FindAnnotations \
   -PannotationPattern='@org.springframework.web.bind.annotation.RestController'
